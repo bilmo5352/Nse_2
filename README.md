@@ -33,7 +33,7 @@ Scrapes NSE equity quote page and extracts comprehensive stock data.
 **Query Parameters:**
 - `symbol` (required): Stock symbol (e.g., RELIANCE, TCS, INFY)
 - `name` (required): Company slug exactly as in NSE URL (e.g., `Reliance-Industries-Limited`)
-- `headless` (optional): Run browser in headless mode (default: true)
+- `headless` (optional): Run browser in headless mode (default: true; enforced if `FORCE_HEADLESS=true`)
 - `take_screenshot` (optional): Save screenshot (default: false)
 - `output_dir` (optional): Output directory path
 
@@ -72,7 +72,7 @@ Scrapes NSE financial results comparison page for a given stock symbol.
 
 **Query Parameters:**
 - `symbol` (required): Stock symbol (e.g., RELIANCE, TCS, INFY)
-- `headless` (optional): Run browser in headless mode (default: true)
+- `headless` (optional): Run browser in headless mode (default: true; enforced if `FORCE_HEADLESS=true`)
 - `output_dir` (optional): Output directory path
 
 **Response:**

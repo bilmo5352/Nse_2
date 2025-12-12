@@ -81,8 +81,11 @@ def get_equity_quote():
         # Format: https://www.nseindia.com/get-quote/equity/{SYMBOL}/{COMPANY-SLUG}
         url = f"https://www.nseindia.com/get-quote/equity/{symbol}/{company_slug}"
         
-        # Get optional parameters (default headless=True)
+        # Headless: enforce headless in hosted envs unless explicitly disabled via env
+        headless_env = os.getenv("FORCE_HEADLESS", "true").lower() == "true"
         headless = request.args.get('headless', 'true').lower() == 'true'
+        if headless_env:
+            headless = True
         take_screenshot = request.args.get('take_screenshot', 'false').lower() == 'true'  # Default to False to save resources
         output_dir = request.args.get('output_dir', OUTPUT_DIR)
         
@@ -128,7 +131,7 @@ def get_financial_report():
     
     Query Parameters:
         symbol (required): Stock symbol (e.g., RELIANCE, TCS, INFY)
-        headless (optional): Run browser in headless mode (default: true)
+        headless (optional): Run browser in headless mode (default: true; enforced if FORCE_HEADLESS=true)
     
     Example:
         GET /api/financial-report?symbol=RELIANCE
@@ -155,7 +158,10 @@ def get_financial_report():
         
         symbol = symbol.upper().strip()
         output_dir = request.args.get('output_dir', OUTPUT_DIR)
+        headless_env = os.getenv("FORCE_HEADLESS", "true").lower() == "true"
         headless = request.args.get('headless', 'true').lower() == 'true'  # Default to headless=True
+        if headless_env:
+            headless = True
         
         # Fixed NSE financial results URL
         url = "https://www.nseindia.com/companies-listing/corporate-filings-financial-results-comparision"
