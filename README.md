@@ -33,7 +33,10 @@ Scrapes NSE equity quote page and extracts comprehensive stock data.
 **Query Parameters:**
 - `symbol` (required): Stock symbol (e.g., RELIANCE, TCS, INFY)
 - `name` (required): Company slug exactly as in NSE URL (e.g., `Reliance-Industries-Limited`)
-- `headless` (optional): Run browser in headless mode (default: true; enforced if `FORCE_HEADLESS=true`)
+  - Find this by visiting NSE website - the URL will show the format: `/equity/{SYMBOL}/{COMPANY-NAME}`
+- `headless` (optional): Run browser in headless mode (default: true)
+  - Set to `false` to see browser window (useful for debugging)
+  - Query parameter takes precedence over environment variable
 - `take_screenshot` (optional): Save screenshot (default: false)
 - `output_dir` (optional): Output directory path
 
@@ -72,7 +75,9 @@ Scrapes NSE financial results comparison page for a given stock symbol.
 
 **Query Parameters:**
 - `symbol` (required): Stock symbol (e.g., RELIANCE, TCS, INFY)
-- `headless` (optional): Run browser in headless mode (default: true; enforced if `FORCE_HEADLESS=true`)
+- `headless` (optional): Run browser in headless mode (default: true)
+  - Set to `false` to see browser window (useful for debugging)
+  - Query parameter takes precedence over environment variable
 - `output_dir` (optional): Output directory path
 
 **Response:**
@@ -118,9 +123,9 @@ Returns API health status.
 
 ### Using curl:
 
-**Equity Quote:**
+**Equity Quote (requires both symbol and name):**
 ```bash
-curl "http://localhost:5000/api/equity-quote?symbol=RELIANCE"
+curl "http://localhost:5000/api/equity-quote?symbol=RELIANCE&name=Reliance-Industries-Limited"
 ```
 
 **Financial Report:**
@@ -130,10 +135,10 @@ curl "http://localhost:5000/api/financial-report?symbol=RELIANCE"
 
 **With optional parameters:**
 ```bash
-# Equity Quote with screenshot
-curl "http://localhost:5000/api/equity-quote?symbol=RELIANCE&take_screenshot=true"
+# Equity Quote with screenshot and visible browser
+curl "http://localhost:5000/api/equity-quote?symbol=RELIANCE&name=Reliance-Industries-Limited&headless=false&take_screenshot=true"
 
-# Financial Report with visible browser
+# Financial Report with visible browser (for debugging)
 curl "http://localhost:5000/api/financial-report?symbol=RELIANCE&headless=false"
 ```
 
@@ -142,16 +147,19 @@ curl "http://localhost:5000/api/financial-report?symbol=RELIANCE&headless=false"
 ```python
 import requests
 
-# Equity Quote
+# Equity Quote (requires both symbol and name)
 response = requests.get('http://localhost:5000/api/equity-quote', params={
     'symbol': 'RELIANCE',
-    'headless': 'true'
+    'name': 'Reliance-Industries-Limited',
+    'headless': 'true',  # Set to 'false' to see browser window
+    'take_screenshot': 'false'
 })
 print(response.json())
 
 # Financial Report
 response = requests.get('http://localhost:5000/api/financial-report', params={
-    'symbol': 'RELIANCE'
+    'symbol': 'RELIANCE',
+    'headless': 'true'  # Set to 'false' to see browser window
 })
 print(response.json())
 ```
@@ -159,13 +167,40 @@ print(response.json())
 ### Using Browser:
 
 Simply open in your browser:
-- `http://localhost:5000/api/equity-quote?symbol=RELIANCE`
+- `http://localhost:5000/api/equity-quote?symbol=RELIANCE&name=Reliance-Industries-Limited`
 - `http://localhost:5000/api/financial-report?symbol=RELIANCE`
+
+**Note:** For the equity quote endpoint, you must provide both `symbol` and `name` parameters. The `name` should match the company slug in the NSE URL (e.g., `Reliance-Industries-Limited` for RELIANCE).
 
 ## Notes
 
 - The scrapers use Playwright with human-like behavior to avoid bot detection
-- Scraping may take 10-30 seconds depending on page load times
+- Scraping may take 30-90 seconds depending on page load times (timeout set to 90 seconds)
 - Screenshots and HTML files are saved to the `output` directory by default
-- For production, set `headless=True` and `take_screenshot=False` to save resources
+- **Equity Quote Endpoint**: Requires both `symbol` and `name` parameters. The `name` should be the company slug from the NSE URL (e.g., `Reliance-Industries-Limited`)
+- **Headless Mode**: 
+  - Default is `headless=true` (browser runs in background)
+  - Set `headless=false` in query params to see the browser window (useful for debugging)
+  - In production (Railway), headless mode is enforced automatically
+- **For production**: Set `headless=true` and `take_screenshot=false` to save resources
+
+## Deployment
+
+The API is configured for deployment on Railway with:
+- Docker support (see `Dockerfile`)
+- Gevent workers for better async handling
+- 10-minute timeout for long-running scraping operations
+- Automatic headless mode enforcement in production
+
+## Finding Company Name/Slug for Equity Quote
+
+To find the correct `name` parameter for a stock:
+1. Visit NSE website: `https://www.nseindia.com/get-quote/equity/{SYMBOL}`
+2. The URL will redirect to: `https://www.nseindia.com/get-quote/equity/{SYMBOL}/{COMPANY-NAME}`
+3. Use the `{COMPANY-NAME}` part as the `name` parameter
+
+Example:
+- Symbol: `RELIANCE`
+- NSE URL: `https://www.nseindia.com/get-quote/equity/RELIANCE/Reliance-Industries-Limited`
+- Use: `name=Reliance-Industries-Limited`
 
