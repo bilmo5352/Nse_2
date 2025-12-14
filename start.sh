@@ -4,6 +4,9 @@
 
 set -e
 
+# Make sure we're in the right directory
+cd "$(dirname "$0")" || exit 1
+
 echo "=========================================="
 echo "Setting up xvfb for virtual display..."
 echo "=========================================="

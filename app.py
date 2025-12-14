@@ -48,6 +48,59 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 import platform
 if platform.system() == 'Linux' and not DEFAULT_HEADLESS:
     display = os.environ.get('DISPLAY')
+    if not display:
+        logger.warning("✗ DISPLAY environment variable is NOT set on Linux!")
+        logger.info("Attempting to start xvfb and set DISPLAY...")
+        
+        # Try to start xvfb programmatically
+        try:
+            import subprocess
+            import time
+            
+            # Check if xvfb is already running on :99
+            check_result = subprocess.run(
+                ['xdpyinfo', '-display', ':99'],
+                capture_output=True,
+                timeout=2
+            )
+            
+            if check_result.returncode == 0:
+                logger.info("✓ xvfb is already running on display :99")
+                os.environ['DISPLAY'] = ':99'
+                display = ':99'
+            else:
+                # Start xvfb
+                logger.info("Starting xvfb on display :99...")
+                xvfb_process = subprocess.Popen(
+                    ['Xvfb', ':99', '-screen', '0', '1920x1080x24', '-ac', '+extension', 'RANDR'],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+                
+                # Wait for xvfb to start
+                time.sleep(2)
+                
+                # Verify it's running
+                if xvfb_process.poll() is None:
+                    # Process is still running, verify display
+                    verify_result = subprocess.run(
+                        ['xdpyinfo', '-display', ':99'],
+                        capture_output=True,
+                        timeout=2
+                    )
+                    if verify_result.returncode == 0:
+                        os.environ['DISPLAY'] = ':99'
+                        display = ':99'
+                        logger.info("✓ xvfb started successfully and DISPLAY=:99 is now set")
+                    else:
+                        logger.error("✗ xvfb started but display :99 is not accessible")
+                else:
+                    logger.error("✗ xvfb process died immediately after starting")
+        except FileNotFoundError:
+            logger.error("✗ xvfb (Xvfb) command not found. Make sure xvfb is installed.")
+        except Exception as e:
+            logger.error(f"✗ Failed to start xvfb: {e}")
+    
     if display:
         logger.info(f"✓ DISPLAY environment variable is set: {display}")
         # Verify display is accessible
@@ -65,9 +118,8 @@ if platform.system() == 'Linux' and not DEFAULT_HEADLESS:
         except Exception as e:
             logger.warning(f"⚠ Could not verify display accessibility: {e}")
     else:
-        logger.error("✗ DISPLAY environment variable is NOT set on Linux!")
-        logger.error("✗ Headed mode will fail. Make sure start.sh is running xvfb and setting DISPLAY=:99")
-        logger.error("✗ Check Railway logs to see if xvfb started successfully")
+        logger.error("✗ DISPLAY could not be set. Headed mode will fail.")
+        logger.error("✗ Check Railway logs and ensure xvfb packages are installed.")
 
 logger.info(f"Starting NSE Scraper API in {FLASK_ENV} mode")
 logger.info(f"Default headless mode: {DEFAULT_HEADLESS}")
