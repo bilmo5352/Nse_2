@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["python311", "chromium", "xvfb-run"]
+nixPkgs = ["python311", "chromium", "xorg.xvfb", "xorg.xdpyinfo"]
 
 [phases.install]
 cmds = [
@@ -9,5 +9,5 @@ cmds = [
 ]
 
 [start]
-cmd = "gunicorn --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 300 --worker-class gevent app:app"
+cmd = "bash start.sh"
 

@@ -12,6 +12,7 @@ import argparse
 from datetime import datetime
 from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
+from browser_utils import get_browser_launch_args
 
 
 async def human_delay(min_sec: float = 0.5, max_sec: float = 2.0):
@@ -595,9 +596,14 @@ async def scrape_with_homepage_search(
     html_path = os.path.join(output_dir, f"{domain}_quote_{timestamp}.html")
     json_path = os.path.join(output_dir, f"{domain}_quote_{timestamp}.json")
     
+    # Handle headed mode in headless environments (e.g., Railway)
+    actual_headless, additional_args = get_browser_launch_args(headless)
+    if actual_headless != headless:
+        print(f"[INFO] Adjusted headless mode: requested={headless}, actual={actual_headless}")
+    
     async with async_playwright() as p:
         browser = await p.chromium.launch(
-            headless=headless,
+            headless=actual_headless,
             args=[
                 '--no-sandbox',
                 '--disable-dev-shm-usage', 
@@ -609,7 +615,7 @@ async def scrape_with_homepage_search(
                 '--window-size=1920,1080',
                 '--disable-blink-features=AutomationControlled',
                 '--disable-http2'
-            ],
+            ] + additional_args,
         )
         
         context = await browser.new_context(
