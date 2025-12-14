@@ -50,52 +50,126 @@ if platform.system() == 'Linux' and not DEFAULT_HEADLESS:
     display = os.environ.get('DISPLAY')
     if not display:
         logger.warning("✗ DISPLAY environment variable is NOT set on Linux!")
-        logger.info("Attempting to start xvfb and set DISPLAY...")
+        logger.info("Checking if xvfb is already running...")
         
         # Try to start xvfb programmatically
         try:
             import subprocess
             import time
+            import os as os_module
             
-            # Check if xvfb is already running on :99
+            display_num = 99
+            lock_file = f"/tmp/.X{display_num}-lock"
+            pid_file = f"/tmp/.X{display_num}-pid"
+            
+            # First, check if display is already accessible
             check_result = subprocess.run(
-                ['xdpyinfo', '-display', ':99'],
+                ['xdpyinfo', '-display', f':{display_num}'],
                 capture_output=True,
                 timeout=2
             )
             
             if check_result.returncode == 0:
-                logger.info("✓ xvfb is already running on display :99")
-                os.environ['DISPLAY'] = ':99'
-                display = ':99'
+                logger.info(f"✓ xvfb is already running on display :{display_num}")
+                os.environ['DISPLAY'] = f':{display_num}'
+                display = f':{display_num}'
             else:
-                # Start xvfb
-                logger.info("Starting xvfb on display :99...")
-                xvfb_process = subprocess.Popen(
-                    ['Xvfb', ':99', '-screen', '0', '1920x1080x24', '-ac', '+extension', 'RANDR'],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL
-                )
-                
-                # Wait for xvfb to start
-                time.sleep(2)
-                
-                # Verify it's running
-                if xvfb_process.poll() is None:
-                    # Process is still running, verify display
-                    verify_result = subprocess.run(
-                        ['xdpyinfo', '-display', ':99'],
-                        capture_output=True,
-                        timeout=2
-                    )
-                    if verify_result.returncode == 0:
-                        os.environ['DISPLAY'] = ':99'
-                        display = ':99'
-                        logger.info("✓ xvfb started successfully and DISPLAY=:99 is now set")
+                # Check if there's a stale lock file
+                if os_module.path.exists(lock_file):
+                    logger.info(f"Found lock file {lock_file}, checking if process is alive...")
+                    # Check if PID file exists and process is running
+                    if os_module.path.exists(pid_file):
+                        try:
+                            with open(pid_file, 'r') as f:
+                                pid = int(f.read().strip())
+                            # Check if process exists
+                            result = subprocess.run(['ps', '-p', str(pid)], capture_output=True)
+                            if result.returncode == 0:
+                                logger.info(f"xvfb process {pid} is running, waiting for display...")
+                                time.sleep(2)
+                                # Check again
+                                check_result2 = subprocess.run(
+                                    ['xdpyinfo', '-display', f':{display_num}'],
+                                    capture_output=True,
+                                    timeout=2
+                                )
+                                if check_result2.returncode == 0:
+                                    os.environ['DISPLAY'] = f':{display_num}'
+                                    display = f':{display_num}'
+                                    logger.info(f"✓ Display :{display_num} is now accessible")
+                                else:
+                                    logger.warning("Process exists but display not accessible, removing stale files...")
+                                    try:
+                                        os_module.remove(lock_file)
+                                        os_module.remove(pid_file)
+                                    except:
+                                        pass
+                            else:
+                                logger.info("Process is dead, removing stale files...")
+                                try:
+                                    os_module.remove(lock_file)
+                                    os_module.remove(pid_file)
+                                except:
+                                    pass
+                        except Exception as e:
+                            logger.warning(f"Error checking PID file: {e}, removing stale files...")
+                            try:
+                                os_module.remove(lock_file)
+                                os_module.remove(pid_file)
+                            except:
+                                pass
                     else:
-                        logger.error("✗ xvfb started but display :99 is not accessible")
-                else:
-                    logger.error("✗ xvfb process died immediately after starting")
+                        logger.info("Lock file exists but no PID file, removing stale lock...")
+                        try:
+                            os_module.remove(lock_file)
+                        except:
+                            pass
+                
+                # Only start xvfb if display is still not accessible
+                if not display:
+                    logger.info(f"Starting xvfb on display :{display_num}...")
+                    xvfb_process = subprocess.Popen(
+                        ['Xvfb', f':{display_num}', '-screen', '0', '1920x1080x24', '-ac', '+extension', 'RANDR', '-nolisten', 'tcp'],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+                    
+                    # Save PID
+                    try:
+                        with open(pid_file, 'w') as f:
+                            f.write(str(xvfb_process.pid))
+                    except:
+                        pass
+                    
+                    # Wait for xvfb to start
+                    time.sleep(3)
+                    
+                    # Verify it's running
+                    if xvfb_process.poll() is None:
+                        # Process is still running, verify display
+                        verify_result = subprocess.run(
+                            ['xdpyinfo', '-display', f':{display_num}'],
+                            capture_output=True,
+                            timeout=2
+                        )
+                        if verify_result.returncode == 0:
+                            os.environ['DISPLAY'] = f':{display_num}'
+                            display = f':{display_num}'
+                            logger.info(f"✓ xvfb started successfully and DISPLAY=:{display_num} is now set")
+                        else:
+                            logger.error(f"✗ xvfb started but display :{display_num} is not accessible")
+                            try:
+                                xvfb_process.terminate()
+                                os_module.remove(pid_file)
+                            except:
+                                pass
+                    else:
+                        logger.error("✗ xvfb process died immediately after starting")
+                        try:
+                            os_module.remove(pid_file)
+                            os_module.remove(lock_file)
+                        except:
+                            pass
         except FileNotFoundError:
             logger.error("✗ xvfb (Xvfb) command not found. Make sure xvfb is installed.")
         except Exception as e:
