@@ -2,7 +2,7 @@
 Flask API for NSE Equity Quote and Financial Report Scraping
 
 Endpoints:
-    GET /api/equity-quote?symbol=RELIANCE - Scrape equity quote data
+    GET /api/dashboard?symbol=RELIANCE - Scrape equity quote data (dashboard)
     GET /api/financial-report?symbol=RELIANCE - Scrape financial report data
 """
 
@@ -10,25 +10,43 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import asyncio
 import os
-import urllib.parse
-from equity_quote_run import scrape_equity_quote
+import logging
+from datetime import datetime
+from dashbord import scrape_with_homepage_search
 from finiancialReport import scrape_with_search
 
+# Configure logging for production
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__)
+
 # Enable CORS for all origins
-# This explicitly allows http://localhost:5173 along with all other origins (*)
-# Note: CORS(app) allows all origins, which includes http://localhost:5173
 CORS(app, resources={
     r"/*": {
-        "origins": "*",  # Allows all origins including http://localhost:5173
+        "origins": "*",
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"]
     }
 })
 
-# Default output directory
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
+# Configuration from environment variables
+FLASK_ENV = os.getenv('FLASK_ENV', 'production')
+FLASK_DEBUG = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
+DEFAULT_HEADLESS = os.getenv('HEADLESS_MODE', 'false').lower() == 'true'
+OUTPUT_DIR = os.getenv('OUTPUT_DIR', os.path.join(os.path.dirname(__file__), "output"))
+PORT = int(os.getenv('PORT', 5000))
+
+# Create output directory if it doesn't exist
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+logger.info(f"Starting NSE Scraper API in {FLASK_ENV} mode")
+logger.info(f"Default headless mode: {DEFAULT_HEADLESS}")
+logger.info(f"Output directory: {OUTPUT_DIR}")
 
 
 def run_async(coro):
@@ -53,19 +71,19 @@ def run_async(coro):
         return loop.run_until_complete(coro)
 
 
-@app.route('/api/equity-quote', methods=['GET'])
-def get_equity_quote():
+@app.route('/api/dashboard', methods=['GET'])
+def get_dashboard():
     """
-    Scrape NSE equity quote data.
+    Scrape NSE equity quote data (dashboard) by searching from homepage.
     
     Query Parameters:
         symbol (required): Stock symbol (e.g., RELIANCE, TCS, INFY)
-        name   (required): Company slug as shown in NSE URL (e.g., Reliance-Industries-Limited)
-        headless (optional): Run browser in headless mode (default: true)
-        take_screenshot (optional): Save screenshot (default: false)
+        headless (optional): Run browser in headless mode (default: from env or false - headed mode)
+        take_screenshot (optional): Save screenshot (default: true)
+        output_dir (optional): Output directory path
     
     Example:
-        GET /api/equity-quote?symbol=RELIANCE
+        GET /api/dashboard?symbol=RELIANCE
     
     Response:
         {
@@ -77,47 +95,39 @@ def get_equity_quote():
             "json": "path/to/json.json"
         }
     """
+    start_time = datetime.now()
     try:
-        # Get symbol and name from query parameters
+        # Get symbol from query parameters
         symbol = request.args.get('symbol')
-        company_name = request.args.get('name')
         
         if not symbol:
+            logger.warning("Dashboard request missing symbol parameter")
             return jsonify({
                 "status": "error",
                 "error": "Missing required query parameter: 'symbol'"
             }), 400
-        if not company_name:
-            return jsonify({
-                "status": "error",
-                "error": "Missing required query parameter: 'name' (e.g., Reliance-Industries-Limited)"
-            }), 400
         
         symbol = symbol.upper().strip()
-        # Normalize the company slug: strip, replace spaces with hyphens, URL-encode safely
-        company_slug = company_name.strip().replace(" ", "-")
-        company_slug = urllib.parse.quote(company_slug, safe="-")
+        logger.info(f"Dashboard request received for symbol: {symbol}")
         
-        # Construct NSE equity quote URL from symbol + name
-        # Format: https://www.nseindia.com/get-quote/equity/{SYMBOL}/{COMPANY-SLUG}
-        url = f"https://www.nseindia.com/get-quote/equity/{symbol}/{company_slug}"
-        
-        # Headless: check query parameter first, then env variable
-        # Query parameter takes precedence for local development
+        # Headless: check query parameter first, then env variable, default to False (headed mode)
         headless_param = request.args.get('headless')
         if headless_param is not None:
             headless = headless_param.lower() == 'true'
         else:
-            # If no query param, check environment variable (defaults to true for production)
-            headless_env = os.getenv("FORCE_HEADLESS", "true").lower() == "true"
-            headless = headless_env
-        take_screenshot = request.args.get('take_screenshot', 'false').lower() == 'true'  # Default to False to save resources
+            # Use environment variable default, but default to False (headed mode)
+            headless = DEFAULT_HEADLESS
+        
+        logger.info(f"Running dashboard scraper in {'headless' if headless else 'headed'} mode")
+        
+        # Screenshot: default to True
+        take_screenshot = request.args.get('take_screenshot', 'true').lower() == 'true'
         output_dir = request.args.get('output_dir', OUTPUT_DIR)
         
-        # Run the async scraper
+        # Run the async scraper from dashbord.py
         result = run_async(
-            scrape_equity_quote(
-                url=url,
+            scrape_with_homepage_search(
+                symbol=symbol,
                 output_dir=output_dir,
                 headless=headless,
                 take_screenshot=take_screenshot
@@ -125,10 +135,15 @@ def get_equity_quote():
         )
         
         if result.get('status') == 'error':
+            error_msg = result.get('error', 'Unknown error occurred')
+            logger.error(f"Dashboard scraping failed for {symbol}: {error_msg}")
             return jsonify({
                 "status": "error",
-                "error": result.get('error', 'Unknown error occurred')
+                "error": error_msg
             }), 500
+        
+        elapsed_time = (datetime.now() - start_time).total_seconds()
+        logger.info(f"Dashboard scraping completed for {symbol} in {elapsed_time:.2f}s")
         
         # Return success response with parsed data
         return jsonify({
@@ -139,13 +154,17 @@ def get_equity_quote():
             "screenshot": result.get('screenshot'),
             "html": result.get('html'),
             "json": result.get('json'),
-            "timestamp": result.get('timestamp')
+            "timestamp": result.get('timestamp'),
+            "elapsed_time_seconds": round(elapsed_time, 2)
         }), 200
         
     except Exception as e:
+        elapsed_time = (datetime.now() - start_time).total_seconds()
+        logger.exception(f"Exception in dashboard endpoint: {str(e)}")
         return jsonify({
             "status": "error",
-            "error": str(e)
+            "error": str(e),
+            "elapsed_time_seconds": round(elapsed_time, 2)
         }), 500
 
 
@@ -156,7 +175,8 @@ def get_financial_report():
     
     Query Parameters:
         symbol (required): Stock symbol (e.g., RELIANCE, TCS, INFY)
-        headless (optional): Run browser in headless mode (default: true; enforced if FORCE_HEADLESS=true)
+        headless (optional): Run browser in headless mode (default: from env or false - headed mode)
+        output_dir (optional): Output directory path
     
     Example:
         GET /api/financial-report?symbol=RELIANCE
@@ -171,27 +191,32 @@ def get_financial_report():
             "json": "path/to/json.json"
         }
     """
+    start_time = datetime.now()
     try:
         # Get symbol from query parameters
         symbol = request.args.get('symbol')
         
         if not symbol:
+            logger.warning("Financial report request missing symbol parameter")
             return jsonify({
                 "status": "error",
                 "error": "Missing required query parameter: 'symbol'"
             }), 400
         
         symbol = symbol.upper().strip()
+        logger.info(f"Financial report request received for symbol: {symbol}")
+        
         output_dir = request.args.get('output_dir', OUTPUT_DIR)
-        # Headless: check query parameter first, then env variable
-        # Query parameter takes precedence for local development
+        
+        # Headless: check query parameter first, then env variable, default to False (headed mode)
         headless_param = request.args.get('headless')
         if headless_param is not None:
             headless = headless_param.lower() == 'true'
         else:
-            # If no query param, check environment variable (defaults to true for production)
-            headless_env = os.getenv("FORCE_HEADLESS", "true").lower() == "true"
-            headless = headless_env
+            # Use environment variable default, but default to False (headed mode)
+            headless = DEFAULT_HEADLESS
+        
+        logger.info(f"Running financial report scraper in {'headless' if headless else 'headed'} mode")
         
         # Fixed NSE financial results URL
         url = "https://www.nseindia.com/companies-listing/corporate-filings-financial-results-comparision"
@@ -207,10 +232,15 @@ def get_financial_report():
         )
         
         if result.get('status') == 'error':
+            error_msg = result.get('error', 'Unknown error occurred')
+            logger.error(f"Financial report scraping failed for {symbol}: {error_msg}")
             return jsonify({
                 "status": "error",
-                "error": result.get('error', 'Unknown error occurred')
+                "error": error_msg
             }), 500
+        
+        elapsed_time = (datetime.now() - start_time).total_seconds()
+        logger.info(f"Financial report scraping completed for {symbol} in {elapsed_time:.2f}s")
         
         # Return success response with parsed data
         return jsonify({
@@ -220,13 +250,17 @@ def get_financial_report():
             "screenshot": result.get('screenshot'),
             "html": result.get('html'),
             "json": result.get('json'),
-            "timestamp": result.get('timestamp')
+            "timestamp": result.get('timestamp'),
+            "elapsed_time_seconds": round(elapsed_time, 2)
         }), 200
         
     except Exception as e:
+        elapsed_time = (datetime.now() - start_time).total_seconds()
+        logger.exception(f"Exception in financial report endpoint: {str(e)}")
         return jsonify({
             "status": "error",
-            "error": str(e)
+            "error": str(e),
+            "elapsed_time_seconds": round(elapsed_time, 2)
         }), 500
 
 
@@ -244,25 +278,31 @@ def index():
     """API documentation endpoint"""
     return jsonify({
         "name": "NSE Scraper API",
-        "version": "1.0.0",
+        "version": "2.0.0",
+        "description": "API for scraping NSE equity dashboard and financial reports",
         "endpoints": {
-            "GET /api/equity-quote": {
-                "description": "Scrape NSE equity quote data",
-                "required_params": ["symbol", "name (company slug, e.g., Reliance-Industries-Limited)"],
-                "optional_params": ["headless (default=true)", "take_screenshot", "output_dir"],
-                "example": "/api/equity-quote?symbol=RELIANCE&name=Reliance-Industries-Limited&headless=true"
+            "GET /api/dashboard": {
+                "description": "Scrape NSE equity quote data (dashboard) by searching from homepage",
+                "required_params": ["symbol"],
+                "optional_params": ["headless (default=false - headed mode)", "take_screenshot (default=true)", "output_dir"],
+                "example": "/api/dashboard?symbol=RELIANCE"
             },
             "GET /api/financial-report": {
                 "description": "Scrape NSE financial results comparison",
                 "required_params": ["symbol"],
-                "optional_params": ["headless (default=true)", "output_dir"],
-                "example": "/api/financial-report?symbol=RELIANCE&headless=true"
+                "optional_params": ["headless (default=false - headed mode)", "output_dir"],
+                "example": "/api/financial-report?symbol=RELIANCE"
             },
             "GET /health": "Health check endpoint"
-        }
+        },
+        "note": "Both endpoints run in headed mode (browser visible) by default. Set headless=true to run in headless mode."
     }), 200
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # For local development
+    app.run(debug=FLASK_DEBUG, host='0.0.0.0', port=PORT)
+else:
+    # For production (gunicorn)
+    logger.info("Running in production mode with gunicorn")
 

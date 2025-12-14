@@ -258,19 +258,34 @@ async def scrape_with_search(url: str, search_term: str, output_dir: str = "outp
         try:
             print(f"[INFO] Priming cookies via NSE homepage...")
             try:
-                await page.goto("https://www.nseindia.com", wait_until="domcontentloaded", timeout=60000)
+                # Use 'load' for headless mode, 'domcontentloaded' for non-headless
+                wait_strategy = "load" if headless else "domcontentloaded"
+                timeout_val = 120000 if headless else 60000  # Longer timeout for headless
+                
+                await page.goto("https://www.nseindia.com", wait_until=wait_strategy, timeout=timeout_val)
                 await human_delay(2, 4)
             except Exception as e:
                 print(f"[WARN] Failed priming on homepage: {e}")
+                # Try with minimal wait as fallback
+                try:
+                    await page.goto("https://www.nseindia.com", wait_until="commit", timeout=30000)
+                    await human_delay(3, 5)
+                except:
+                    print(f"[WARN] Fallback priming also failed, continuing anyway...")
             
             print(f"[INFO] Opening page: {url}")
             # Navigate to the page with retries to avoid transient HTTP/2 issues
             goto_success = False
             for attempt in range(3):
                 try:
-                    await page.goto(url, wait_until="networkidle", timeout=90000)  # 90s max
-                    # Wait for main content selectors
-                    await page.wait_for_selector('main#midBody, div#resultsCompare', timeout=30000)
+                    # Use 'load' for headless mode, 'networkidle' for non-headless
+                    wait_strategy = "load" if headless else "networkidle"
+                    timeout_val = 120000 if headless else 90000  # Longer timeout for headless
+                    
+                    await page.goto(url, wait_until=wait_strategy, timeout=timeout_val)
+                    # Wait for main content selectors with longer timeout in headless
+                    selector_timeout = 45000 if headless else 30000
+                    await page.wait_for_selector('main#midBody, div#resultsCompare', timeout=selector_timeout)
                     # Trigger lazy load by scrolling
                     await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                     await page.wait_for_timeout(5000)  # Stabilize
@@ -279,8 +294,14 @@ async def scrape_with_search(url: str, search_term: str, output_dir: str = "outp
                 except Exception as e:
                     print(f"[WARN] goto attempt {attempt+1} failed: {e}")
                     if attempt == 2:
-                        raise
-                    await human_delay(2, 4)
+                        # Last attempt - try with minimal wait
+                        try:
+                            await page.goto(url, wait_until="commit", timeout=30000)
+                            await page.wait_for_timeout(5000)
+                        except:
+                            raise
+                    else:
+                        await human_delay(2, 4)
             
             
             print(f"[INFO] Waiting for page to fully load...")

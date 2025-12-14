@@ -1,206 +1,154 @@
 # NSE Scraper API
 
-Flask API for scraping NSE (National Stock Exchange) equity quotes and financial reports.
+A production-ready Flask API for scraping NSE (National Stock Exchange) equity dashboard and financial reports.
 
-## Installation
+## Features
 
-1. Install Python dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-2. Install Playwright browsers:
-```bash
-playwright install chromium
-```
-
-## Running the API
-
-```bash
-python app.py
-```
-
-The API will start on `http://localhost:5000`
+- **Dashboard Scraping**: Scrape equity quote data by searching from NSE homepage
+- **Financial Report Scraping**: Extract financial results comparison data
+- **Headed Mode**: Runs with visible browser by default (can be configured)
+- **Production Ready**: Configured for Railway deployment with proper logging and error handling
 
 ## API Endpoints
 
-### 1. Equity Quote Endpoint
-
-**GET** `/api/equity-quote`
-
-Scrapes NSE equity quote page and extracts comprehensive stock data.
+### 1. Dashboard Endpoint
+```
+GET /api/dashboard?symbol=RELIANCE
+```
 
 **Query Parameters:**
 - `symbol` (required): Stock symbol (e.g., RELIANCE, TCS, INFY)
-- `name` (required): Company slug exactly as in NSE URL (e.g., `Reliance-Industries-Limited`)
-  - Find this by visiting NSE website - the URL will show the format: `/equity/{SYMBOL}/{COMPANY-NAME}`
-- `headless` (optional): Run browser in headless mode (default: true)
-  - Set to `false` to see browser window (useful for debugging)
-  - Query parameter takes precedence over environment variable
-- `take_screenshot` (optional): Save screenshot (default: false)
+- `headless` (optional): Run browser in headless mode (default: false - headed mode)
+- `take_screenshot` (optional): Save screenshot (default: true)
 - `output_dir` (optional): Output directory path
-
-**Response:**
-```json
-{
-    "status": "success",
-    "symbol": "RELIANCE",
-    "url": "...",
-    "data": {
-        "symbol": "RELIANCE",
-        "last_price": "2,450.00",
-        "change": "+25.50",
-        "percent_change": "+1.05%",
-        "open": "2,425.00",
-        "high": "2,460.00",
-        "low": "2,420.00",
-        "prev_close": "2,424.50",
-        "vwap": "2,440.00",
-        "traded_volume_lakhs": "1,234.56",
-        "traded_value_cr": "3,012.34",
-        ...
-    },
-    "screenshot": "output/...",
-    "html": "output/...",
-    "json": "output/...",
-    "timestamp": "20240101_120000"
-}
-```
 
 ### 2. Financial Report Endpoint
-
-**GET** `/api/financial-report`
-
-Scrapes NSE financial results comparison page for a given stock symbol.
+```
+GET /api/financial-report?symbol=RELIANCE
+```
 
 **Query Parameters:**
 - `symbol` (required): Stock symbol (e.g., RELIANCE, TCS, INFY)
-- `headless` (optional): Run browser in headless mode (default: true)
-  - Set to `false` to see browser window (useful for debugging)
-  - Query parameter takes precedence over environment variable
+- `headless` (optional): Run browser in headless mode (default: false - headed mode)
 - `output_dir` (optional): Output directory path
 
-**Response:**
+### 3. Health Check
+```
+GET /health
+```
+
+### 4. API Documentation
+```
+GET /
+```
+
+## Local Development
+
+1. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   playwright install chromium
+   playwright install-deps chromium
+   ```
+
+2. **Run the server:**
+   ```bash
+   python app.py
+   ```
+
+3. **Test the API:**
+   ```bash
+   curl "http://localhost:5000/api/dashboard?symbol=RELIANCE"
+   curl "http://localhost:5000/api/financial-report?symbol=TCS"
+   ```
+
+## Railway Deployment
+
+### Prerequisites
+- Railway account
+- Git repository with your code
+
+### Deployment Steps
+
+1. **Connect your repository to Railway:**
+   - Go to [Railway](https://railway.app)
+   - Create a new project
+   - Connect your Git repository
+
+2. **Configure Environment Variables (optional):**
+   - `FLASK_ENV`: Set to `production` (default: `production`)
+   - `FLASK_DEBUG`: Set to `False` (default: `False`)
+   - `HEADLESS_MODE`: Set to `false` for headed mode (default: `false`)
+   - `OUTPUT_DIR`: Output directory path (default: `output`)
+   - `PORT`: Server port (Railway sets this automatically)
+
+3. **Deploy:**
+   - Railway will automatically detect the `Procfile` and deploy
+   - The build process will:
+     - Install Python dependencies
+     - Install Playwright browsers
+     - Install browser dependencies
+
+4. **Monitor:**
+   - Check logs in Railway dashboard
+   - Use the `/health` endpoint to verify the API is running
+
+### Important Notes for Railway
+
+- **Headed Mode**: Railway runs in a headless Linux environment. For headed mode to work, the `nixpacks.toml` includes `xvfb-run` which provides a virtual display. However, you may need to set `HEADLESS_MODE=true` if headed mode doesn't work.
+- **Memory**: Playwright browsers require significant memory. Ensure your Railway plan has adequate resources.
+- **Timeouts**: The API has a 300-second timeout for long-running scraping operations.
+
+## Project Structure
+
+```
+.
+├── app.py                 # Flask API application
+├── dashbord.py           # Dashboard scraper
+├── finiancialReport.py   # Financial report scraper
+├── requirements.txt      # Python dependencies
+├── Procfile              # Railway process file
+├── runtime.txt           # Python version
+├── railway.json          # Railway configuration
+├── nixpacks.toml         # Nixpacks build configuration
+└── output/               # Output directory for scraped files
+```
+
+## Environment Variables
+
+| Variable | Default | Description |
+|---------|---------|-------------|
+| `FLASK_ENV` | `production` | Flask environment |
+| `FLASK_DEBUG` | `False` | Enable debug mode |
+| `HEADLESS_MODE` | `false` | Run browsers in headless mode |
+| `OUTPUT_DIR` | `output` | Directory for output files |
+| `PORT` | `5000` | Server port (Railway sets automatically) |
+
+## Response Format
+
+### Success Response
 ```json
 {
-    "status": "success",
-    "symbol": "RELIANCE",
-    "parsed_data": {
-        "status": "success",
-        "company": {
-            "name": "Reliance Industries Limited",
-            "symbol": "RELIANCE"
-        },
-        "quarters": ["31-Mar-2024", "31-Dec-2023", ...],
-        "sections": [
-            {
-                "section_name": "Income",
-                "line_items": [
-                    {
-                        "name": "Total Income",
-                        "values": ["123456", "234567", ...],
-                        "is_total": true
-                    }
-                ]
-            }
-        ],
-        ...
-    },
-    "screenshot": "output/...",
-    "html": "output/...",
-    "json": "output/...",
-    "timestamp": "20240101_120000"
+  "status": "success",
+  "symbol": "RELIANCE",
+  "data": { ... },
+  "screenshot": "path/to/screenshot.png",
+  "html": "path/to/html.html",
+  "json": "path/to/json.json",
+  "timestamp": "20241214_123456",
+  "elapsed_time_seconds": 45.23
 }
 ```
 
-### 3. Health Check
-
-**GET** `/health`
-
-Returns API health status.
-
-## Example Usage
-
-### Using curl:
-
-**Equity Quote (requires both symbol and name):**
-```bash
-curl "http://localhost:5000/api/equity-quote?symbol=RELIANCE&name=Reliance-Industries-Limited"
+### Error Response
+```json
+{
+  "status": "error",
+  "error": "Error message here",
+  "elapsed_time_seconds": 12.45
+}
 ```
 
-**Financial Report:**
-```bash
-curl "http://localhost:5000/api/financial-report?symbol=RELIANCE"
-```
+## License
 
-**With optional parameters:**
-```bash
-# Equity Quote with screenshot and visible browser
-curl "http://localhost:5000/api/equity-quote?symbol=RELIANCE&name=Reliance-Industries-Limited&headless=false&take_screenshot=true"
-
-# Financial Report with visible browser (for debugging)
-curl "http://localhost:5000/api/financial-report?symbol=RELIANCE&headless=false"
-```
-
-### Using Python:
-
-```python
-import requests
-
-# Equity Quote (requires both symbol and name)
-response = requests.get('http://localhost:5000/api/equity-quote', params={
-    'symbol': 'RELIANCE',
-    'name': 'Reliance-Industries-Limited',
-    'headless': 'true',  # Set to 'false' to see browser window
-    'take_screenshot': 'false'
-})
-print(response.json())
-
-# Financial Report
-response = requests.get('http://localhost:5000/api/financial-report', params={
-    'symbol': 'RELIANCE',
-    'headless': 'true'  # Set to 'false' to see browser window
-})
-print(response.json())
-```
-
-### Using Browser:
-
-Simply open in your browser:
-- `http://localhost:5000/api/equity-quote?symbol=RELIANCE&name=Reliance-Industries-Limited`
-- `http://localhost:5000/api/financial-report?symbol=RELIANCE`
-
-**Note:** For the equity quote endpoint, you must provide both `symbol` and `name` parameters. The `name` should match the company slug in the NSE URL (e.g., `Reliance-Industries-Limited` for RELIANCE).
-
-## Notes
-
-- The scrapers use Playwright with human-like behavior to avoid bot detection
-- Scraping may take 30-90 seconds depending on page load times (timeout set to 90 seconds)
-- Screenshots and HTML files are saved to the `output` directory by default
-- **Equity Quote Endpoint**: Requires both `symbol` and `name` parameters. The `name` should be the company slug from the NSE URL (e.g., `Reliance-Industries-Limited`)
-- **Headless Mode**: 
-  - Default is `headless=true` (browser runs in background)
-  - Set `headless=false` in query params to see the browser window (useful for debugging)
-  - In production (Railway), headless mode is enforced automatically
-- **For production**: Set `headless=true` and `take_screenshot=false` to save resources
-
-## Deployment
-
-The API is configured for deployment on Railway with:
-- Docker support (see `Dockerfile`)
-- Gevent workers for better async handling
-- 10-minute timeout for long-running scraping operations
-- Automatic headless mode enforcement in production
-
-## Finding Company Name/Slug for Equity Quote
-
-To find the correct `name` parameter for a stock:
-1. Visit NSE website: `https://www.nseindia.com/get-quote/equity/{SYMBOL}`
-2. The URL will redirect to: `https://www.nseindia.com/get-quote/equity/{SYMBOL}/{COMPANY-NAME}`
-3. Use the `{COMPANY-NAME}` part as the `name` parameter
-
-Example:
-- Symbol: `RELIANCE`
-- NSE URL: `https://www.nseindia.com/get-quote/equity/RELIANCE/Reliance-Industries-Limited`
-- Use: `name=Reliance-Industries-Limited`
-
+MIT
