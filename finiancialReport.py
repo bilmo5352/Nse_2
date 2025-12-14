@@ -203,9 +203,14 @@ async def scrape_with_search(url: str, search_term: str, output_dir: str = "outp
     json_path = os.path.join(output_dir, f"{domain}_data_{timestamp}.json")
     
     # Handle headed mode in headless environments (e.g., Railway)
+    # This will raise RuntimeError if headed mode is requested but DISPLAY is not available
     actual_headless, additional_args = get_browser_launch_args(headless)
-    if actual_headless != headless:
-        print(f"[INFO] Adjusted headless mode: requested={headless}, actual={actual_headless}")
+    
+    if actual_headless:
+        print("[WARN] Running in HEADLESS mode")
+    else:
+        display = os.environ.get('DISPLAY', 'Not set')
+        print(f"[INFO] Running in HEADED mode with DISPLAY={display}")
     
     async with async_playwright() as p:
         # Launch browser with optimized args for better performance and stability

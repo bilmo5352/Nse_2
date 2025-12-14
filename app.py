@@ -44,6 +44,31 @@ PORT = int(os.getenv('PORT', 5000))
 # Create output directory if it doesn't exist
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+# Check DISPLAY environment variable if we're on Linux and not in headless mode
+import platform
+if platform.system() == 'Linux' and not DEFAULT_HEADLESS:
+    display = os.environ.get('DISPLAY')
+    if display:
+        logger.info(f"✓ DISPLAY environment variable is set: {display}")
+        # Verify display is accessible
+        try:
+            import subprocess
+            result = subprocess.run(
+                ['xdpyinfo', '-display', display],
+                capture_output=True,
+                timeout=2
+            )
+            if result.returncode == 0:
+                logger.info(f"✓ Display {display} is accessible and working")
+            else:
+                logger.warning(f"⚠ Display {display} is set but may not be accessible")
+        except Exception as e:
+            logger.warning(f"⚠ Could not verify display accessibility: {e}")
+    else:
+        logger.error("✗ DISPLAY environment variable is NOT set on Linux!")
+        logger.error("✗ Headed mode will fail. Make sure start.sh is running xvfb and setting DISPLAY=:99")
+        logger.error("✗ Check Railway logs to see if xvfb started successfully")
+
 logger.info(f"Starting NSE Scraper API in {FLASK_ENV} mode")
 logger.info(f"Default headless mode: {DEFAULT_HEADLESS}")
 logger.info(f"Output directory: {OUTPUT_DIR}")
